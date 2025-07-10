@@ -257,7 +257,8 @@ class RDFGraph(Graph):
         Returns:
             RDFGraph: A new RDFGraph instance.
         """
-        turtle_str = bytes(turtle_str, "utf-8").decode("unicode_escape")
+        # Remove the problematic unicode_escape decoding that causes malformed RDF
+        # turtle_str = bytes(turtle_str, "utf-8").decode("unicode_escape")
         patched_turtle = cls._ensure_prefixes(turtle_str)
         g = cls()
         g.parse(data=patched_turtle, format="turtle")
@@ -613,9 +614,13 @@ class Ontology(OntologyProperties):
                 self.iri = f"{self.current_domain}/{self.ontology_id}"
             elif self.ontology_id and self.iri:
                 expected_iri = f"{self.current_domain}/{self.ontology_id}"
-                if not self.iri.endswith(f"/{self.ontology_id}"):
+                # Allow both '/' and '#' endings for ontology IRIs (RDF standard practice)
+                if not (
+                    self.iri.endswith(f"/{self.ontology_id}")
+                    or self.iri.endswith(f"/{self.ontology_id}#")
+                ):
                     logger.warning(
-                        f"Ontology IRI '{self.iri}' does not match expected '{expected_iri}'"
+                        f"Ontology IRI '{self.iri}' does not match expected '{expected_iri}' or '{expected_iri}#'"
                     )
             elif not self.ontology_id and self.iri and self.iri != ONTOLOGY_NULL_IRI:
                 self.ontology_id = derive_ontology_id(self.iri)
@@ -648,9 +653,13 @@ class Ontology(OntologyProperties):
                 self.iri = f"{self.current_domain}/{self.ontology_id}"
             elif self.ontology_id and self.iri:
                 expected_iri = f"{self.current_domain}/{self.ontology_id}"
-                if not self.iri.endswith(f"/{self.ontology_id}"):
+                # Allow both '/' and '#' endings for ontology IRIs (RDF standard practice)
+                if not (
+                    self.iri.endswith(f"/{self.ontology_id}")
+                    or self.iri.endswith(f"/{self.ontology_id}#")
+                ):
                     logger.warning(
-                        f"Ontology IRI '{self.iri}' does not match expected '{expected_iri}'"
+                        f"Ontology IRI '{self.iri}' does not match expected '{expected_iri}' or '{expected_iri}#'"
                     )
             elif not self.ontology_id and self.iri and self.iri != ONTOLOGY_NULL_IRI:
                 self.ontology_id = derive_ontology_id(self.iri)
@@ -669,9 +678,13 @@ class Ontology(OntologyProperties):
                 self.iri = f"{self.current_domain}/{self.ontology_id}"
             elif self.iri:
                 expected_iri = f"{self.current_domain}/{self.ontology_id}"
-                if not self.iri.endswith(f"/{self.ontology_id}"):
+                # Allow both '/' and '#' endings for ontology IRIs (RDF standard practice)
+                if not (
+                    self.iri.endswith(f"/{self.ontology_id}")
+                    or self.iri.endswith(f"/{self.ontology_id}#")
+                ):
                     logger.warning(
-                        f"Ontology IRI '{self.iri}' does not match expected '{expected_iri}'"
+                        f"Ontology IRI '{self.iri}' does not match expected '{expected_iri}' or '{expected_iri}#'"
                     )
         elif self.iri:
             self.ontology_id = derive_ontology_id(self.iri)

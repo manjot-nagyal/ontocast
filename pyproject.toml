@@ -36,13 +36,15 @@ dependencies = [
   "langgraph>=0.2.35",
   "neo4j>=5.28.1",
   "owlready2>=0.47",
+  "pre-commit>=4.2.0",
   "rapidfuzz>=3.13.0",
   "rdflib>=7.1.4",
   "rich>=14.0.0",
   "robyn>=0.66.2",
   "sentence-transformers>=4.1.0",
   "simsimd>=6.2.1",
-  "suthing>=0.4.1"
+  "suthing>=0.4.1",
+  "tqdm>=4.67.1"
 ]
 description = "Agentic ontology and knowledge graph co-generation"
 name = "ontocast"

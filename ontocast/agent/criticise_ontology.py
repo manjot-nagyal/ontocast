@@ -11,7 +11,7 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 
 from ontocast.onto import (
-    ONTOLOGY_NULL_IRI,
+    ONTOLOGY_NULL_ID,
     AgentState,
     FailureStages,
     OntologyUpdateCritiqueReport,
@@ -20,6 +20,7 @@ from ontocast.onto import (
 from ontocast.prompt.criticise_ontology import prompt_fresh, prompt_update
 from ontocast.tool import LLMTool, OntologyManager
 from ontocast.toolbox import ToolBox
+from ontocast.util import truncate_ontology_string, truncate_text
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,23 @@ def criticise_ontology(state: AgentState, tools: ToolBox) -> AgentState:
         state.status = Status.FAILED
         return state
 
-    if state.current_ontology.iri == ONTOLOGY_NULL_IRI:
+    # Check if this is a new ontology (either None or ONTOLOGY_NULL_ID)
+    is_new_ontology = (
+        state.current_ontology.ontology_id is None
+        or state.current_ontology.ontology_id == ONTOLOGY_NULL_ID
+    )
+
+    if is_new_ontology:
         prompt = prompt_fresh
         ontology_original_str = ""
     else:
+        ontology_serialized = state.current_ontology.graph.serialize(format="turtle")
+
+        # Truncate ontology string to prevent API limits
+        ontology_serialized = truncate_ontology_string(ontology_serialized)
+
         ontology_original_str = (
-            f"Here is the original ontology:"
-            f"\n```ttl\n{state.current_ontology.graph.serialize(format='turtle')}\n```"
+            f"Here is the original ontology:\n```ttl\n{ontology_serialized}\n```"
         )
         prompt = prompt_update
 
@@ -67,10 +78,19 @@ def criticise_ontology(state: AgentState, tools: ToolBox) -> AgentState:
         ],
     )
 
+    # Also truncate the ontology update string
+    ontology_update_serialized = state.ontology_addendum.graph.serialize(
+        format="turtle"
+    )
+    ontology_update_serialized = truncate_ontology_string(ontology_update_serialized)
+
+    # Truncate chunk text to prevent API limits
+    chunk_text = truncate_text(state.current_chunk.text)
+
     response = llm_tool(
         prompt.format_prompt(
-            ontology_update=state.ontology_addendum.graph.serialize(format="turtle"),
-            document=state.current_chunk.text,
+            ontology_update=ontology_update_serialized,
+            document=chunk_text,
             format_instructions=parser.get_format_instructions(),
             ontology_original_str=ontology_original_str,
         )
@@ -81,15 +101,32 @@ def criticise_ontology(state: AgentState, tools: ToolBox) -> AgentState:
         f"score: {critique.ontology_update_score}"
     )
 
-    if state.current_ontology.iri == ONTOLOGY_NULL_IRI:
+    if is_new_ontology:
         logger.debug("Adding new ontology to manager")
         om_tool.ontologies.append(state.ontology_addendum)
         state.current_ontology = state.ontology_addendum
     else:
         logger.info(f"Updating existing ontology: {state.current_ontology.ontology_id}")
-        om_tool.update_ontology(
-            state.current_ontology.ontology_id, state.ontology_addendum.graph
-        )
+        try:
+            om_tool.update_ontology(
+                state.current_ontology.ontology_id, state.ontology_addendum.graph
+            )
+        except ValueError:
+            logger.debug(
+                f"Ontology {state.current_ontology.ontology_id} not found, treating as new ontology."
+            )
+            logger.debug("Adding new ontology to manager")
+            om_tool.ontologies.append(state.ontology_addendum)
+            state.current_ontology = state.ontology_addendum
+        except Exception as e:
+            logger.error(
+                f"Failed to update ontology {state.current_ontology.ontology_id}: {e}"
+            )
+            state.set_failure(
+                stage=FailureStages.ONTOLOGY_CRITIQUE,
+                reason=f"Failed to update ontology: {e}",
+                success_score=0.0,
+            )
 
     if critique.ontology_update_success:
         logger.info("Ontology critique successful, clearing failure state")

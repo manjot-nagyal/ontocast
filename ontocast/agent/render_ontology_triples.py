@@ -21,6 +21,7 @@ from ontocast.prompt.render_ontology import (
     template_prompt,
 )
 from ontocast.toolbox import ToolBox
+from ontocast.util import truncate_ontology_string, truncate_text
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,13 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
 
     logger.debug(f"Using domain: {state.current_domain}")
 
-    if state.current_ontology.ontology_id == ONTOLOGY_NULL_ID:
+    # Check if this is a new ontology (either None or ONTOLOGY_NULL_ID)
+    is_new_ontology = (
+        state.current_ontology.ontology_id is None
+        or state.current_ontology.ontology_id == ONTOLOGY_NULL_ID
+    )
+
+    if is_new_ontology:
         logger.info("Creating fresh ontology")
         ontology_instruction = ontology_instruction_fresh
         specific_ontology_instruction = specific_ontology_instruction_fresh.format(
@@ -55,6 +62,10 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
     else:
         ontology_iri = state.current_ontology.iri
         ontology_str = state.current_ontology.graph.serialize(format="turtle")
+
+        # Truncate ontology string to prevent API limits
+        ontology_str = truncate_ontology_string(ontology_str)
+
         ontology_desc = state.current_ontology.describe()
         ontology_instruction = ontology_instruction_update.format(
             ontology_iri=ontology_iri,
@@ -89,9 +100,12 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
         _failure_instruction = ""
 
     try:
+        # Truncate chunk text to prevent API limits
+        chunk_text = truncate_text(state.current_chunk.text)
+
         response = llm_tool(
             prompt.format_prompt(
-                text=state.current_chunk.text,
+                text=chunk_text,
                 instructions=_instructions,
                 ontology_instruction=ontology_instruction,
                 failure_instruction=_failure_instruction,

@@ -18,6 +18,7 @@ from ontocast.prompt.render_facts import (
     template_prompt as template_prompt_str,
 )
 from ontocast.toolbox import ToolBox
+from ontocast.util import truncate_ontology_string, truncate_text
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,9 @@ def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
     parser = PydanticOutputParser(pydantic_object=SemanticTriplesFactsReport)
 
     ontology_str = state.current_ontology.graph.serialize(format="turtle")
+
+    # Truncate ontology string to prevent API limits
+    ontology_str = truncate_ontology_string(ontology_str)
 
     ontology_instruction_str = ontology_instruction.format(
         ontology_iri=state.current_ontology.iri, ontology_str=ontology_str
@@ -73,11 +77,14 @@ def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
         else:
             failure_instruction = ""
 
+        # Truncate chunk text to prevent API limits
+        chunk_text = truncate_text(state.current_chunk.text)
+
         response = llm_tool(
             prompt.format_prompt(
                 ontology_namespace=state.current_ontology.namespace,
                 current_doc_namespace=state.current_chunk.namespace,
-                text=state.current_chunk.text,
+                text=chunk_text,
                 ontology_instruction=ontology_instruction_str,
                 failure_instruction=failure_instruction,
                 format_instructions=parser.get_format_instructions(),

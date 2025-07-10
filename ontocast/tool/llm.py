@@ -12,6 +12,8 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain_core.language_models import BaseChatModel
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
+
+# TODO: Add support for gemini models
 from pydantic import BaseModel, Field
 
 from .onto import Tool
@@ -94,6 +96,11 @@ class LLMTool(Tool):
             self._llm = ChatOllama(
                 model=self.model, base_url=self.base_url, temperature=self.temperature
             )
+        # elif self.provider == "google":
+        #     self._llm = ChatGoogleGenerativeAI(
+        #     model=self.model,
+        #     temperature=self.temperature
+        # )
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
 

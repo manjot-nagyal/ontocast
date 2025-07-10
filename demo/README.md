@@ -29,6 +29,22 @@ You can use the provided `sample.pdf` or `sample.txt` in this directory.
 curl -X POST http://localhost:8999/process -F "file=@demo/sample.pdf"
 ```
 
+**Example:**
+```bash
+curl -X POST http://localhost:8999/process -F "file=@/data/pdf/fin.10Q.apple.pdf"
+```
+
+**For JSON:**
+```bash
+curl -X POST http://localhost:8999/process -F "file=@demo/sample.json"
+```
+
+**Example:**
+```bash
+curl -X POST http://localhost:8999/process -F "file=@data/json/fin.10Q.apple.json"
+```
+
+
 **For plain text:**
 ```bash
 curl -X POST http://localhost:8999/process -H "Content-Type: application/json" -d '{"text": "Your document text here"}'

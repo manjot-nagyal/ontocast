@@ -318,7 +318,9 @@ def run(
         fuseki_auth=fuseki_auth,
         clean=clean,
     )
-    init_toolbox(tools)
+    # Set up cache directory in the working directory
+    cache_dir = working_directory / "cache" / "ontology_properties"
+    init_toolbox(tools, cache_dir=cache_dir)
 
     workflow: CompiledStateGraph = create_agent_graph(tools)
 

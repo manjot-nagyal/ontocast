@@ -9,7 +9,7 @@ import logging
 
 from rdflib import Namespace
 
-from ontocast.onto import AgentState, FailureStages, RDFGraph
+from ontocast.onto import ONTOLOGY_NULL_ID, AgentState, FailureStages, RDFGraph
 from ontocast.tool.validate import validate_and_connect_chunk
 from ontocast.toolbox import ToolBox
 
@@ -95,7 +95,24 @@ def sublimate_ontology(state: AgentState, tools: ToolBox):
                 ns_prefix_current_ontology[0], Namespace(state.current_ontology.iri)
             )
 
-        om_tool.update_ontology(state.current_ontology.ontology_id, graph_onto_addendum)
+        # Handle the case where the ontology doesn't exist in the manager yet
+        # This can happen in chunked processing when ontology_id is still ONTOLOGY_NULL_ID
+        if (
+            state.current_ontology.ontology_id is not None
+            and state.current_ontology.ontology_id != ONTOLOGY_NULL_ID
+        ):
+            try:
+                om_tool.update_ontology(
+                    state.current_ontology.ontology_id, graph_onto_addendum
+                )
+            except ValueError as e:
+                logger.warning(f"Could not update ontology in manager: {e}")
+                # If ontology doesn't exist in manager, just continue without updating
+                # The ontology will be handled properly in the next workflow step
+        else:
+            logger.debug(
+                "Skipping ontology update as ontology_id is still ONTOLOGY_NULL_ID"
+            )
 
         # Ensure graph_facts is an RDFGraph instance
         if not isinstance(graph_facts, RDFGraph):

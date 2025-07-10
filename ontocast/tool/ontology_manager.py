@@ -39,11 +39,37 @@ class OntologyManager(Tool):
         Args:
             ontology_id: The short name of the ontology to update.
             ontology_addendum: The RDF graph containing additional triples to add.
+
+        Raises:
+            ValueError: If the ontology with the given ID is not found.
         """
-        current_idx = next(
-            i for i, o in enumerate(self.ontologies) if o.ontology_id == ontology_id
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Attempting to update ontology with ID: '{ontology_id}'")
+        logger.debug(
+            f"Available ontologies: {[o.ontology_id for o in self.ontologies]}"
         )
-        self.ontologies[current_idx] += ontology_addendum
+
+        try:
+            # Find the ontology by ID
+            current_idx = None
+            for i, o in enumerate(self.ontologies):
+                if o.ontology_id == ontology_id:
+                    current_idx = i
+                    break
+
+            if current_idx is None:
+                error_msg = f"Ontology with ID '{ontology_id}' not found in manager. Available ontologies: {[o.ontology_id for o in self.ontologies]}"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            logger.debug(f"Updating ontology '{ontology_id}' at index {current_idx}")
+            self.ontologies[current_idx] += ontology_addendum
+            logger.debug(f"Successfully updated ontology '{ontology_id}'")
+
+        except Exception as e:
+            logger.error(f"Error in update_ontology: {e}")
+            logger.error(f"Exception type: {type(e)}")
+            raise
 
     def get_ontology_names(self) -> list[str]:
         """Get a list of all ontology short names.
