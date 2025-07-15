@@ -282,7 +282,7 @@ def run(
     """
     if logging_level is not None:
         try:
-            logger_conf = f"logging.{logging_level}.conf"
+            logger_conf = f"logging/logging.{logging_level}.conf"
             logging.config.fileConfig(logger_conf, disable_existing_loggers=False)
             logger.debug("debug is on")
         except Exception as e:
@@ -338,6 +338,7 @@ def run(
 
         async def process_files():
             for file_path in files:
+                logger.info(f"Processing {file_path.name}")
                 try:
                     state = AgentState(
                         files={file_path.as_posix(): file_path.read_bytes()},

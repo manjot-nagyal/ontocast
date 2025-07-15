@@ -48,6 +48,12 @@ def criticise_ontology(state: AgentState, tools: ToolBox) -> AgentState:
         state.status = Status.FAILED
         return state
 
+    # ---------------------------------------------------------------
+    # Prepare context text *once* so it is available in every branch
+    # ---------------------------------------------------------------
+
+    chunk_text = truncate_text(state.current_chunk.text)
+
     # Check if this is a new ontology (either None or ONTOLOGY_NULL_ID)
     is_new_ontology = (
         state.current_ontology.ontology_id is None
@@ -60,8 +66,11 @@ def criticise_ontology(state: AgentState, tools: ToolBox) -> AgentState:
     else:
         ontology_serialized = state.current_ontology.graph.serialize(format="turtle")
 
-        # Truncate ontology string to prevent API limits
-        ontology_serialized = truncate_ontology_string(ontology_serialized)
+        # Truncate ontology string to prevent API limits (semantic reduction)
+        ontology_serialized = truncate_ontology_string(
+            # ontology_serialized, context=chunk_text
+            ontology_serialized
+        )
 
         ontology_original_str = (
             f"Here is the original ontology:\n```ttl\n{ontology_serialized}\n```"
@@ -78,14 +87,17 @@ def criticise_ontology(state: AgentState, tools: ToolBox) -> AgentState:
         ],
     )
 
-    # Also truncate the ontology update string
+    # ------------------------------------------------------------------
+    # Also truncate the *ontology update* string using the same chunk context
+    # ------------------------------------------------------------------
+
     ontology_update_serialized = state.ontology_addendum.graph.serialize(
         format="turtle"
     )
-    ontology_update_serialized = truncate_ontology_string(ontology_update_serialized)
 
-    # Truncate chunk text to prevent API limits
-    chunk_text = truncate_text(state.current_chunk.text)
+    ontology_update_serialized = truncate_ontology_string(
+        ontology_update_serialized, context=chunk_text
+    )
 
     response = llm_tool(
         prompt.format_prompt(

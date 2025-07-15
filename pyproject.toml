@@ -27,6 +27,7 @@ dependencies = [
   "asyncio>=3.4.3",
   "click>=8.1.8",
   "docling>=2.32.0",
+  "einops>=0.8.1",
   "langchain-core>=0.3.60",
   "langchain-experimental>=0.3.4",
   "langchain-huggingface>=0.2.0",

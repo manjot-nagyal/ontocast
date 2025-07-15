@@ -680,7 +680,7 @@ class Ontology(OntologyProperties):
                 expected_iri = f"{self.current_domain}/{self.ontology_id}"
                 # Allow both '/' and '#' endings for ontology IRIs (RDF standard practice)
                 if not (
-                    self.iri.endswith(f"/{self.ontology_id}")
+                    self.iri.endswith(f"/{self.ontology_id}/")
                     or self.iri.endswith(f"/{self.ontology_id}#")
                 ):
                     logger.warning(

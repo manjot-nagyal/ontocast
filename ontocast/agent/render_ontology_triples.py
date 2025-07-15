@@ -21,7 +21,7 @@ from ontocast.prompt.render_ontology import (
     template_prompt,
 )
 from ontocast.toolbox import ToolBox
-from ontocast.util import truncate_ontology_string, truncate_text
+from ontocast.util import truncate_text
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,8 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
         ontology_str = state.current_ontology.graph.serialize(format="turtle")
 
         # Truncate ontology string to prevent API limits
-        ontology_str = truncate_ontology_string(ontology_str)
+        # ontology_str = truncate_ontology_string(ontology_str, context=truncate_text(state.current_chunk.text))
+        ontology_str = truncate_text(ontology_str)
 
         ontology_desc = state.current_ontology.describe()
         ontology_instruction = ontology_instruction_update.format(

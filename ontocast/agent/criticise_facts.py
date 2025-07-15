@@ -12,7 +12,7 @@ from langchain.prompts import PromptTemplate
 from ontocast.onto import AgentState, FailureStages, KGCritiqueReport
 from ontocast.prompt.criticise_facts import prompt as criticise_facts_prompt
 from ontocast.toolbox import ToolBox
-from ontocast.util import truncate_ontology_string, truncate_text
+from ontocast.util import truncate_text
 
 logger = logging.getLogger(__name__)
 
@@ -49,15 +49,17 @@ def criticise_facts(state: AgentState, tools: ToolBox) -> AgentState:
         ],
     )
 
-    # Truncate both ontology and knowledge graph strings to prevent API limits
-    ontology_str = state.current_ontology.graph.serialize(format="turtle")
-    ontology_str = truncate_ontology_string(ontology_str)
-
-    knowledge_graph_str = state.current_chunk.graph.serialize(format="turtle")
-    knowledge_graph_str = truncate_ontology_string(knowledge_graph_str)
-
     # Truncate chunk text to prevent API limits
     chunk_text = truncate_text(state.current_chunk.text)
+
+    # Truncate both ontology and knowledge graph strings to prevent API limits
+    ontology_str = state.current_ontology.graph.serialize(format="turtle")
+    # ontology_str = truncate_ontology_string(ontology_str, context=chunk_text)
+    ontology_str = truncate_text(ontology_str)
+
+    knowledge_graph_str = state.current_chunk.graph.serialize(format="turtle")
+    # knowledge_graph_str = truncate_ontology_string(knowledge_graph_str, context=chunk_text)
+    knowledge_graph_str = truncate_text(knowledge_graph_str)
 
     response = llm_tool(
         prompt.format_prompt(

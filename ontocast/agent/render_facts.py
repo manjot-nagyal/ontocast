@@ -18,7 +18,7 @@ from ontocast.prompt.render_facts import (
     template_prompt as template_prompt_str,
 )
 from ontocast.toolbox import ToolBox
-from ontocast.util import truncate_ontology_string, truncate_text
+from ontocast.util import truncate_text
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,8 @@ def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
     ontology_str = state.current_ontology.graph.serialize(format="turtle")
 
     # Truncate ontology string to prevent API limits
-    ontology_str = truncate_ontology_string(ontology_str)
+    # ontology_str = truncate_ontology_string(ontology_str, context=truncate_text(state.current_chunk.text))
+    ontology_str = truncate_text(ontology_str)
 
     ontology_instruction_str = ontology_instruction.format(
         ontology_iri=state.current_ontology.iri, ontology_str=ontology_str

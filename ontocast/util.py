@@ -1,6 +1,10 @@
 import hashlib
 import logging
+from typing import List, Optional
 
+import torch
+from langchain_community.utils.math import cosine_similarity
+from langchain_huggingface import HuggingFaceEmbeddings
 from rdflib import Graph
 from rdflib.namespace import NamespaceManager
 
@@ -27,34 +31,162 @@ def get_rdflib_namespace_mappings() -> dict:
     return {str(uri): prefix for prefix, uri in ns_manager.namespaces()}
 
 
-def truncate_ontology_string(ontology_str: str, max_chars: int = 50000) -> str:
-    """Truncate ontology string to prevent API limits being exceeded.
+# Instead of truncating use semnatic chunking in the ChunkerTool class
+def chunk_ontology_semantically(
+    ontology_str: str,
+    max_chars: int = 50000,
+    embeddings=None,
+    context: Optional[str] = None,
+) -> list[str]:
+    """Split an ontology string into semantic chunks using ChunkerTool.
+
+    The import for ChunkerTool is done locally to avoid circular imports at
+    module-import time.
+    """
+
+    from ontocast.tool.chunk.chunker import ChunkerTool  # local import
+
+    chunker = ChunkerTool(
+        breakpoint_threshold_amount=95,
+        breakpoint_threshold_type="percentile",
+        max_chunk_size=20000,
+        # model="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+    )
+
+    chunks = chunker(ontology_str)
+    return chunks
+
+
+# Instead of outputting all chunks, return only the semantically most relevant ones
+def select_relevant_ontology_chunks(
+    ontology_str: str,
+    context: str,
+    max_chunks: int = 3,
+    max_chars: int = 50000,
+    embeddings=None,
+) -> list[str]:
+    """Return the ontology chunks that are most relevant to a given context.
+
+    This helper first splits the ontology into semantic chunks (via ``ChunkerTool``)
+    and then ranks those chunks by cosine similarity to the *context* string
+    using sentence-transformer embeddings.  Only the top ``max_chunks`` chunks are
+    returned, and the function respects an overall character budget of
+    ``max_chars``.
 
     Args:
-        ontology_str: The full ontology string in turtle format.
-        max_chars: Maximum number of characters to keep (default: 50000).
+        ontology_str: Complete ontology (Turtle) as a raw string.
+        context: Natural-language text we want the ontology chunks to be relevant to.
+        max_chunks: Maximum number of chunks to return (default: 3).
+        max_chars: Combined character budget for the returned chunks (default: 50 000).
+        embeddings: Optional pre-initialised ``Embeddings`` instance to reuse.
 
     Returns:
-        str: Truncated ontology string with truncation notice if needed.
+        A list of the most relevant chunk strings.
     """
+
+    # 1. Chunk the ontology semantically
+    chunks = chunk_ontology_semantically(
+        ontology_str, max_chars=max_chars, embeddings=embeddings, context=context
+    )
+
+    if not chunks:
+        return []
+
+    # Shortcut: if we already meet the constraints, skip ranking
+    if len(chunks) <= max_chunks and len(ontology_str) <= max_chars:
+        return chunks
+
+    # 2. Prepare an embedding model if none provided
+    if embeddings is None:
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+            model_kwargs={"device": "cuda" if torch.cuda.is_available() else "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+
+    # 3. Embed context and chunks
+    context_vector = embeddings.embed_query(context)
+    chunk_vectors = embeddings.embed_documents(chunks)
+
+    # 4. Rank chunks by similarity to the context
+    similarities = [
+        cosine_similarity([vec], [context_vector])[0][0] for vec in chunk_vectors
+    ]
+    ranked_chunks = [
+        chunk
+        for _, chunk in sorted(
+            zip(similarities, chunks), key=lambda t: t[0], reverse=True
+        )
+    ]
+
+    # 5. Select top-k within char budget
+    selected: List[str] = []
+    total_chars = 0
+    for chunk in ranked_chunks:
+        if len(selected) >= max_chunks:
+            break
+        if total_chars + len(chunk) > max_chars:
+            break
+        selected.append(chunk)
+        total_chars += len(chunk)
+
+    return selected
+
+
+# -----------------------------------------------------------------------------
+# Public helper used throughout the agents
+# -----------------------------------------------------------------------------
+
+
+def truncate_ontology_string(
+    ontology_str: str,
+    max_chars: int = 50000,
+    embeddings=None,
+    context: Optional[str] = None,
+) -> str:
+    """Return a shortened ontology string that fits within the character limit.
+
+    If a ``context`` string is given the function will *semantically* trim the
+    ontology using embeddings; otherwise it performs a simple character-based
+    truncation.
+    """
+
     if len(ontology_str) <= max_chars:
         return ontology_str
 
-    # Find a good truncation point (end of a statement)
+    # When we have context we prefer semantic selection
+    if context is not None:
+        selected_chunks = select_relevant_ontology_chunks(
+            ontology_str,
+            context=context,
+            max_chars=max_chars,
+            embeddings=embeddings,
+        )
+        ontology_str_sem = "\n\n".join(selected_chunks)
+        logger.warning(
+            "Ontology string was semantically reduced from %d to %d characters",
+            len(ontology_str),
+            len(ontology_str_sem),
+        )
+        return ontology_str_sem
+
+    # ------------------------------------------------------------------
+    # Fallback: naïve truncation (keep behaviour identical to old version)
+    # ------------------------------------------------------------------
     truncated = ontology_str[:max_chars]
 
-    # Try to find the last complete statement ending with '.'
+    # Try to end at the last full statement
     last_dot = truncated.rfind(".")
-    if last_dot > max_chars * 0.8:  # Only use if it's not too far back
+    if last_dot > max_chars * 0.8:
         truncated = truncated[: last_dot + 1]
 
-    logger.warning(
-        f"Ontology string truncated from {len(ontology_str)} to {len(truncated)} characters"
-    )
-
-    # Add truncation notice
     truncated += f"\n\n# ... [TRUNCATED: {len(ontology_str) - len(truncated)} characters omitted] ..."
 
+    logger.warning(
+        "Ontology string naive-truncated from %d to %d characters",
+        len(ontology_str),
+        len(truncated),
+    )
     return truncated
 
 

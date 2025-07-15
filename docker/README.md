@@ -102,7 +102,8 @@ NEO4J_AUTH="neo4j/test!passfortesting"
 ```bash
 # Start
 cd docker/neo4j
-docker compose --env-file .env neo4j up -d
+# docker compose --env-file .env neo4j up -d
+docker compose --profile test.sem.neo4j up -d neo4j
 
 # Stop
 docker compose stop neo4j
