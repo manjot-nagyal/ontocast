@@ -6,10 +6,11 @@ understandable.
 """
 
 import logging
+import textwrap
 
-from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 
+from ontocast.dspy_output_parser import DspyOutputParser
 from ontocast.onto import AgentState, FailureStages, SemanticTriplesFactsReport, Status
 from ontocast.prompt.render_facts import (
     ontology_instruction,
@@ -18,7 +19,7 @@ from ontocast.prompt.render_facts import (
     template_prompt as template_prompt_str,
 )
 from ontocast.toolbox import ToolBox
-from ontocast.util import truncate_text
+from ontocast.util import truncate_ontology_string, truncate_text
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +40,14 @@ def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
     logger.info("Starting to render facts")
     llm_tool = tools.llm
 
-    parser = PydanticOutputParser(pydantic_object=SemanticTriplesFactsReport)
+    parser = DspyOutputParser(pydantic_object=SemanticTriplesFactsReport)
 
     ontology_str = state.current_ontology.graph.serialize(format="turtle")
 
     # Truncate ontology string to prevent API limits
-    # ontology_str = truncate_ontology_string(ontology_str, context=truncate_text(state.current_chunk.text))
-    ontology_str = truncate_text(ontology_str)
+    ontology_str = truncate_ontology_string(
+        ontology_str, context=truncate_text(state.current_chunk.text)
+    )
 
     ontology_instruction_str = ontology_instruction.format(
         ontology_iri=state.current_ontology.iri, ontology_str=ontology_str
@@ -78,24 +80,63 @@ def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
         else:
             failure_instruction = ""
 
-        # Truncate chunk text to prevent API limits
-        chunk_text = truncate_text(state.current_chunk.text)
-
-        response = llm_tool(
-            prompt.format_prompt(
-                ontology_namespace=state.current_ontology.namespace,
-                current_doc_namespace=state.current_chunk.namespace,
-                text=chunk_text,
-                ontology_instruction=ontology_instruction_str,
-                failure_instruction=failure_instruction,
-                format_instructions=parser.get_format_instructions(),
-            )
+        # Chunk the input text to create smaller, more manageable prompts
+        chunk_texts = textwrap.wrap(
+            state.current_chunk.text, 4000, replace_whitespace=False
         )
+        reports = []
 
-        proj = parser.parse(response.content)
-        proj.semantic_graph.sanitize_prefixes_namespaces()
+        for i, sub_chunk_text in enumerate(chunk_texts):
+            try:
+                response = llm_tool(
+                    prompt.format_prompt(
+                        ontology_namespace=state.current_ontology.namespace,
+                        current_doc_namespace=state.current_chunk.namespace,
+                        text=truncate_text(
+                            sub_chunk_text
+                        ),  # Still truncate sub-chunk just in case
+                        ontology_instruction=ontology_instruction_str,
+                        failure_instruction=failure_instruction,
+                        format_instructions=parser.get_format_instructions(),
+                    )
+                )
+                report = parser.parse(response.content)
+                reports.append(report)
+            except Exception as e:
+                logging.warning(
+                    f"Failed to process sub-chunk {i + 1}/{len(chunk_texts)}: {e}"
+                )
+
+        # Merge the results from all sub-chunks
+        final_report = SemanticTriplesFactsReport()
+        for report in reports:
+            if report.semantic_graph:
+                final_report.semantic_graph += report.semantic_graph
+
+        # Use the average of the scores
+        valid_relevance_scores = [
+            r.ontology_relevance_score
+            for r in reports
+            if r.ontology_relevance_score is not None
+        ]
+        if valid_relevance_scores:
+            final_report.ontology_relevance_score = sum(valid_relevance_scores) / len(
+                valid_relevance_scores
+            )
+
+        valid_generation_scores = [
+            r.triples_generation_score
+            for r in reports
+            if r.triples_generation_score is not None
+        ]
+        if valid_generation_scores:
+            final_report.triples_generation_score = sum(valid_generation_scores) / len(
+                valid_generation_scores
+            )
+
+        final_report.semantic_graph.sanitize_prefixes_namespaces()
         if state.current_chunk.graph is not None:
-            state.current_chunk.graph += proj.semantic_graph
+            state.current_chunk.graph += final_report.semantic_graph
 
         state.clear_failure()
         return state

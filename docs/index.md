@@ -65,12 +65,15 @@ cp env.example .env
 ```bash
 # LLM Configuration
 # common
-LLM_PROVIDER=openai # or ollama
-LLM_MODEL_NAME=gpt-4o-mini # ollama model
+LLM_PROVIDER=openai # or ollama, or google
+LLM_MODEL_NAME=gpt-4o-mini # or gemini-pro, or ollama model
 LLM_TEMPERATURE=0.0
 
 # openai
 OPENAI_API_KEY=your_openai_api_key_here
+
+# google (gemini)
+GOOGLE_API_KEY=your_google_api_key_here
 
 # ollama
 LLM_BASE_URL=

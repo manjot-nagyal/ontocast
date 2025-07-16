@@ -7,9 +7,9 @@ requirements.
 
 import logging
 
-from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 
+from ontocast.dspy_output_parser import DspyOutputParser
 from ontocast.onto import (
     ONTOLOGY_NULL_ID,
     AgentState,
@@ -42,7 +42,7 @@ def criticise_ontology(state: AgentState, tools: ToolBox) -> AgentState:
     logger.info("Criticize ontology")
     llm_tool: LLMTool = tools.llm
     om_tool: OntologyManager = tools.ontology_manager
-    parser = PydanticOutputParser(pydantic_object=OntologyUpdateCritiqueReport)
+    parser = DspyOutputParser(pydantic_object=OntologyUpdateCritiqueReport)
 
     if state.current_chunk is None:
         state.status = Status.FAILED

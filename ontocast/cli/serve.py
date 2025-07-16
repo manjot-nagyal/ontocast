@@ -296,6 +296,9 @@ def run(
     if llm_provider == "openai" and "OPENAI_API_KEY" not in os.environ:
         raise ValueError("OPENAI_API_KEY environment variable is not set")
 
+    if llm_provider == "google" and "GOOGLE_API_KEY" not in os.environ:
+        raise ValueError("GOOGLE_API_KEY environment variable is not set")
+
     if working_directory:
         working_directory = working_directory.expanduser()
         working_directory.mkdir(parents=True, exist_ok=True)

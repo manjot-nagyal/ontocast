@@ -1,20 +1,20 @@
 """Language Model (LLM) integration tool for OntoCast.
 
 This module provides integration with various language models through LangChain,
-supporting both OpenAI and Ollama providers. It enables text generation and
+supporting OpenAI, Google Gemini, and Ollama providers. It enables text generation and
 structured data extraction capabilities.
 """
 
 import asyncio
 from typing import Any, Optional, Type, TypeVar
 
-from langchain.output_parsers import PydanticOutputParser
 from langchain_core.language_models import BaseChatModel
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
-
-# TODO: Add support for gemini models
 from pydantic import BaseModel, Field
+
+from ontocast.dspy_output_parser import DspyOutputParser
 
 from .onto import Tool
 
@@ -25,7 +25,7 @@ class LLMTool(Tool):
     """Tool for interacting with language models.
 
     This class provides a unified interface for working with different language model
-    providers (OpenAI, Ollama) through LangChain. It supports both synchronous and
+    providers (OpenAI, Google Gemini, Ollama) through LangChain. It supports both synchronous and
     asynchronous operations.
 
     Attributes:
@@ -96,11 +96,10 @@ class LLMTool(Tool):
             self._llm = ChatOllama(
                 model=self.model, base_url=self.base_url, temperature=self.temperature
             )
-        # elif self.provider == "google":
-        #     self._llm = ChatGoogleGenerativeAI(
-        #     model=self.model,
-        #     temperature=self.temperature
-        # )
+        elif self.provider == "google":
+            self._llm = ChatGoogleGenerativeAI(
+                model=self.model, temperature=self.temperature
+            )
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
 
@@ -156,7 +155,7 @@ class LLMTool(Tool):
         Returns:
             T: The extracted data conforming to the output schema.
         """
-        parser = PydanticOutputParser(pydantic_object=output_schema)
+        parser = DspyOutputParser(pydantic_object=output_schema)
         format_instructions = parser.get_format_instructions()
 
         full_prompt = f"{prompt}\n\n{format_instructions}"

@@ -49,6 +49,12 @@ LLM_TEMPERATURE=0.1
 LLM_PROVIDER=openai
 OPENAI_API_KEY=your-api-key-here
 
+# google gemini flavor
+# Google API Key (required for LLM functionality)
+LLM_PROVIDER=google
+GOOGLE_API_KEY=your-google-api-key-here
+LLM_MODEL_NAME=gemini-pro
+
 # ollama flavor
 # BASE URL (if using ollama)
 LLM_BASE_URL=ollama-base-url

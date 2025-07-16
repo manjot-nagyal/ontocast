@@ -6,10 +6,11 @@ understandable.
 """
 
 import logging
+import textwrap
 
-from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 
+from ontocast.dspy_output_parser import DspyOutputParser
 from ontocast.onto import ONTOLOGY_NULL_ID, AgentState, FailureStages, Ontology, Status
 from ontocast.prompt.render_ontology import (
     failure_instruction,
@@ -21,7 +22,7 @@ from ontocast.prompt.render_ontology import (
     template_prompt,
 )
 from ontocast.toolbox import ToolBox
-from ontocast.util import truncate_text
+from ontocast.util import truncate_ontology_string, truncate_text
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
     logger.info("Starting to render ontology triples")
     llm_tool = tools.llm
 
-    parser = PydanticOutputParser(pydantic_object=Ontology)
+    parser = DspyOutputParser(pydantic_object=Ontology)
 
     logger.debug(f"Using domain: {state.current_domain}")
 
@@ -64,8 +65,9 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
         ontology_str = state.current_ontology.graph.serialize(format="turtle")
 
         # Truncate ontology string to prevent API limits
-        # ontology_str = truncate_ontology_string(ontology_str, context=truncate_text(state.current_chunk.text))
-        ontology_str = truncate_text(ontology_str)
+        ontology_str = truncate_ontology_string(
+            ontology_str, context=truncate_text(state.current_chunk.text)
+        )
 
         ontology_desc = state.current_ontology.describe()
         ontology_instruction = ontology_instruction_update.format(
@@ -101,20 +103,39 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
         _failure_instruction = ""
 
     try:
-        # Truncate chunk text to prevent API limits
-        chunk_text = truncate_text(state.current_chunk.text)
-
-        response = llm_tool(
-            prompt.format_prompt(
-                text=chunk_text,
-                instructions=_instructions,
-                ontology_instruction=ontology_instruction,
-                failure_instruction=_failure_instruction,
-                format_instructions=parser.get_format_instructions(),
-            )
+        # Chunk the input text to create smaller, more manageable prompts
+        chunk_texts = textwrap.wrap(
+            state.current_chunk.text, 4000, replace_whitespace=False
         )
+        addenda = []
 
-        state.ontology_addendum = parser.parse(response.content)
+        for i, sub_chunk_text in enumerate(chunk_texts):
+            try:
+                response = llm_tool(
+                    prompt.format_prompt(
+                        text=truncate_text(
+                            sub_chunk_text
+                        ),  # Still truncate sub-chunk just in case
+                        instructions=_instructions,
+                        ontology_instruction=ontology_instruction,
+                        failure_instruction=_failure_instruction,
+                        format_instructions=parser.get_format_instructions(),
+                    )
+                )
+                addendum = parser.parse(response.content)
+                addenda.append(addendum)
+            except Exception as e:
+                logging.warning(
+                    f"Failed to process sub-chunk {i + 1}/{len(chunk_texts)} for ontology addendum: {e}"
+                )
+
+        # Merge the results from all sub-chunks
+        final_addendum = Ontology()
+        for addendum in addenda:
+            if addendum.graph:
+                final_addendum += addendum
+
+        state.ontology_addendum = final_addendum
         state.ontology_addendum.graph.sanitize_prefixes_namespaces()
 
         logger.info(

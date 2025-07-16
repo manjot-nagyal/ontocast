@@ -4,9 +4,9 @@ import json
 import pathlib
 from typing import Optional
 
-from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
 
+from ontocast.dspy_output_parser import DspyOutputParser
 from ontocast.onto import Ontology, OntologyProperties, RDFGraph
 from ontocast.tool import (
     ChunkerTool,
@@ -221,7 +221,7 @@ def render_ontology_summary(
 
     # Helper – original single-shot strategy ---------------------------------
     def _single_call(turtle_str: str) -> OntologyProperties:
-        parser = PydanticOutputParser(pydantic_object=OntologyProperties)
+        parser = DspyOutputParser(pydantic_object=OntologyProperties)
         prompt = PromptTemplate(
             template=(
                 "Below is an ontology in Turtle format:\n\n"
@@ -239,7 +239,7 @@ def render_ontology_summary(
         chunk: str, idx: int, total: int
     ) -> Optional[OntologyProperties]:
         """Process a single chunk asynchronously."""
-        parser = PydanticOutputParser(pydantic_object=OntologyProperties)
+        parser = DspyOutputParser(pydantic_object=OntologyProperties)
         chunk_prompt = PromptTemplate(
             template=(
                 "Below is chunk {idx}/{total} of a large ontology in Turtle format.\n\n"

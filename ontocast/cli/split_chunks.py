@@ -1,7 +1,9 @@
+import hashlib
 import json
 import logging
 import pathlib
 import sys
+import time
 
 import click
 from suthing import FileHandle
@@ -109,6 +111,12 @@ def _format_value(value) -> str:
         return str(value)
 
 
+def _pipeline_hash(chunks: list[str]) -> str:
+    """Return deterministic hash of the chunk list for pipeline tracking."""
+    joined = "||".join(chunks)
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
 def process(fn_json: pathlib.Path, output_path: pathlib.Path, chunker: ChunkerTool):
     logger.debug(f"Processing fn_json: {fn_json}")
 
@@ -123,18 +131,19 @@ def process(fn_json: pathlib.Path, output_path: pathlib.Path, chunker: ChunkerTo
             raise ValueError(f"Not sure about the json format {fn_json}")
 
     docs_txt = chunker(text)
+    file_hash = _pipeline_hash(docs_txt)
 
     sizes = [len(x) for x in docs_txt]
     logger.debug(f"Chunk size: {sizes}")
 
-    chunked = {"chunks": docs_txt}
+    chunked = {"chunks": docs_txt, "pipeline_hash": file_hash}
 
     logger.debug(f"Saving to {output_path / fn_json.name}")
 
     with open(output_path / fn_json.name, "w", encoding="utf-8") as f:
         json.dump(chunked, f, ensure_ascii=False, indent=4)
 
-    return docs_txt
+    return file_hash, len(docs_txt)
 
 
 @click.command()
@@ -156,8 +165,31 @@ def main(input_path, output_path, prefix):
         crawl_directories(input_path.expanduser(), suffixes=(".json",), prefix=prefix)
     )
 
-    for f in files:
-        process(f, output_path, chunker)
+    start_time = time.perf_counter()
+    per_file: dict[str, str] = {}
+    total_chunks = 0
+
+    for idx, f in enumerate(files, start=1):
+        h, n_chunks = process(f, output_path, chunker)
+        per_file[f.name] = h
+        total_chunks += n_chunks
+        logging.info(f"Processed {f.name} ({idx}/{len(files)})")
+
+    summary = {
+        "files": per_file,
+        "progress": f"{len(files)} / {len(files)} (100%)",
+        "metrics": {
+            "total_chunks": total_chunks,
+            "avg_chunks_per_file": total_chunks / len(files) if files else 0,
+            "elapsed_seconds": round(time.perf_counter() - start_time, 2),
+        },
+    }
+
+    with open(output_path / "summary.json", "a", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=4)
+        f.write("\n")
+
+    logging.info("Summary written to summary.json")
 
 
 if __name__ == "__main__":

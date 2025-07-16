@@ -57,6 +57,25 @@ def chunk_ontology_semantically(
     return chunks
 
 
+def _safe_embeddings(
+    model_name: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    try:
+        return HuggingFaceEmbeddings(
+            model_name=model_name,
+            model_kwargs={"device": device},
+        )
+    except RuntimeError as e:
+        if "CUDA out of memory" in str(e):
+            logging.warning("CUDA OOM; retrying on CPU")
+            return HuggingFaceEmbeddings(
+                model_name=model_name,
+                model_kwargs={"device": "cpu"},
+            )
+        raise
+
+
 # Instead of outputting all chunks, return only the semantically most relevant ones
 def select_relevant_ontology_chunks(
     ontology_str: str,
@@ -83,6 +102,9 @@ def select_relevant_ontology_chunks(
     Returns:
         A list of the most relevant chunk strings.
     """
+
+    if embeddings is None:
+        embeddings = _safe_embeddings()
 
     # 1. Chunk the ontology semantically
     chunks = chunk_ontology_semantically(
@@ -138,6 +160,24 @@ def select_relevant_ontology_chunks(
 # -----------------------------------------------------------------------------
 
 
+def truncate(ontology_str: str, max_chars: int = 50000):
+    truncated = ontology_str[:max_chars]
+
+    # Try to end at the last full statement
+    last_dot = truncated.rfind(".")
+    if last_dot > max_chars * 0.8:
+        truncated = truncated[: last_dot + 1]
+
+    truncated += f"\n\n# ... [TRUNCATED: {len(ontology_str) - len(truncated)} characters omitted] ..."
+
+    logger.warning(
+        "Ontology string naive-truncated from %d to %d characters",
+        len(ontology_str),
+        len(truncated),
+    )
+    return truncated
+
+
 def truncate_ontology_string(
     ontology_str: str,
     max_chars: int = 50000,
@@ -168,18 +208,25 @@ def truncate_ontology_string(
             len(ontology_str),
             len(ontology_str_sem),
         )
-        return ontology_str_sem
+        if len(ontology_str_sem) > 0:
+            return ontology_str_sem
+        else:
+            logger.warning(
+                "Semantic selection returned no chunks; using naive truncation"
+            )
+            truncated = truncate(ontology_str, max_chars)
+            truncated += f"\n\n# ... [TRUNCATED: {len(ontology_str) - len(truncated)} characters omitted] ..."
+            logger.warning(
+                "Ontology string naive-truncated from %d to %d characters",
+                len(ontology_str),
+                len(truncated),
+            )
+            return truncated
 
     # ------------------------------------------------------------------
     # Fallback: naïve truncation (keep behaviour identical to old version)
     # ------------------------------------------------------------------
-    truncated = ontology_str[:max_chars]
-
-    # Try to end at the last full statement
-    last_dot = truncated.rfind(".")
-    if last_dot > max_chars * 0.8:
-        truncated = truncated[: last_dot + 1]
-
+    truncated = truncate(ontology_str, max_chars)
     truncated += f"\n\n# ... [TRUNCATED: {len(ontology_str) - len(truncated)} characters omitted] ..."
 
     logger.warning(

@@ -22,6 +22,7 @@ OntoCast is a framework for extracting semantic triples (creating a Knowledge Gr
 - **Entity Disambiguation**: Resolves references across document chunks
 - **Multi-Format Support**: Handles text, JSON, PDF, and Markdown
 - **Semantic Chunking**: Splits text based on semantic similarity
+- **Robust Parsing**: Uses DSPy for schema-enforced LLM output and self-repair.
 - **MCP Compatibility**: Implements Model Control Protocol endpoints
 - **RDF Output**: Produces standardized RDF/Turtle
 - **Triple Store Integration**: Supports Neo4j (n10s) and Apache Fuseki
@@ -65,12 +66,16 @@ cp env.example .env
 ```bash
 # LLM Configuration
 # common
-LLM_PROVIDER=openai # or ollama
-LLM_MODEL_NAME=gpt-4o-mini # ollama model
+LLM_PROVIDER=openai # or ollama, or google
+LLM_MODEL_NAME=gpt-4o-mini # or gemini-pro, or ollama model
 LLM_TEMPERATURE=0.0
 
 # openai
 OPENAI_API_KEY=your_openai_api_key_here
+
+# google (gemini)
+# The key is sourced from LLM_API_KEY for consistency
+LLM_API_KEY=your_google_api_key_here
 
 # ollama
 LLM_BASE_URL=
@@ -86,6 +91,43 @@ FUSEKI_AUTH=admin/abc123-qwe
 
 NEO4J_URI=bolt://localhost:7689
 NEO4J_AUTH=neo4j/test!passfortesting
+```
+
+---
+
+## Usage
+
+OntoCast provides a command-line interface for processing documents.
+
+### Splitting Chunks
+
+The `split_chunks` command processes input files, chunks them, and generates a tracking summary.
+
+```bash
+ontocast split-chunks --input-dir <path_to_your_docs> --output-dir <path_to_output_dir>
+```
+
+This produces two main outputs:
+
+1.  **Chunked Files**: A `chunks` subdirectory containing the processed, chunked documents in JSON format.
+2.  **Summary File**: A `summary.json` file in the output directory. This file provides a manifest of the processed documents and is used for tracking progress through the pipeline.
+
+**`summary.json` structure:**
+
+```json
+{
+  "summary": {
+    "total_files": 1,
+    "total_chunks": 5,
+    "avg_chunks_per_file": 5.0
+  },
+  "files": {
+    "/path/to/your/doc.txt": {
+      "pipeline_hash": "sha256_hash_of_all_chunks",
+      "num_chunks": 5
+    }
+  }
+}
 ```
 
 ---

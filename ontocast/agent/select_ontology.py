@@ -7,9 +7,9 @@ domain and requirements of the text.
 
 import logging
 
-from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 
+from ontocast.dspy_output_parser import DspyOutputParser
 from ontocast.onto import (
     NULL_ONTOLOGY,
     AgentState,
@@ -40,7 +40,7 @@ def select_ontology(state: AgentState, tools: ToolBox) -> AgentState:
     llm_tool = tools.llm
     om_tool: OntologyManager = tools.ontology_manager
 
-    parser = PydanticOutputParser(pydantic_object=OntologySelectorReport)
+    parser = DspyOutputParser(pydantic_object=OntologySelectorReport)
 
     if len(om_tool.ontologies) > 0:
         ontologies_desc = "\n\n".join([o.describe() for o in om_tool.ontologies])

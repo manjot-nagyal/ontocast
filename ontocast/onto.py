@@ -463,14 +463,16 @@ class SemanticTriplesFactsReport(BaseModel):
         "the document in turtle (ttl) format.",
     )
     ontology_relevance_score: Optional[float] = Field(
+        default=0.0,
         description="Score 0-100 for how relevant "
         "the ontology is to the document. "
-        "0 is the worst, 100 is the best."
+        "0 is the worst, 100 is the best.",
     )
     triples_generation_score: Optional[float] = Field(
+        default=0.0,
         description="Score 0-100 for how well "
         "the facts extraction / triples generation was performed. "
-        "0 is the worst, 100 is the best."
+        "0 is the worst, 100 is the best.",
     )
 
 
@@ -680,7 +682,8 @@ class Ontology(OntologyProperties):
                 expected_iri = f"{self.current_domain}/{self.ontology_id}"
                 # Allow both '/' and '#' endings for ontology IRIs (RDF standard practice)
                 if not (
-                    self.iri.endswith(f"/{self.ontology_id}/")
+                    self.iri == expected_iri
+                    or self.iri.endswith(f"/{self.ontology_id}/")
                     or self.iri.endswith(f"/{self.ontology_id}#")
                 ):
                     logger.warning(

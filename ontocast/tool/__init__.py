@@ -5,7 +5,7 @@ including document processing, ontology management, triple store operations,
 and LLM interactions.
 
 The package includes:
-- LLMTool: Language model interaction and prompting
+- LLMTool: Language model interaction and prompting (supports OpenAI, Google Gemini, and Ollama)
 - OntologyManager: Ontology loading and management
 - TripleStoreManager: Abstract interface for triple store operations
 - FusekiTripleStoreManager: Fuseki-specific triple store implementation (preferred)
@@ -20,6 +20,7 @@ interfaces for integration into the OntoCast workflow.
 Example:
     >>> from ontocast.tool import LLMTool, OntologyManager
     >>> llm = LLMTool.create(provider="openai", model="gpt-4")
+    >>> llm_gemini = LLMTool.create(provider="google", model="gemini-pro")
     >>> om = OntologyManager()
 """
 

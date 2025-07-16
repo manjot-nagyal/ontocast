@@ -6,9 +6,9 @@ from text chunks, ensuring their consistency and correctness.
 
 import logging
 
-from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 
+from ontocast.dspy_output_parser import DspyOutputParser
 from ontocast.onto import AgentState, FailureStages, KGCritiqueReport
 from ontocast.prompt.criticise_facts import prompt as criticise_facts_prompt
 from ontocast.toolbox import ToolBox
@@ -37,7 +37,7 @@ def criticise_facts(state: AgentState, tools: ToolBox) -> AgentState:
     logger.info("Criticize facts")
 
     llm_tool = tools.llm
-    parser = PydanticOutputParser(pydantic_object=KGCritiqueReport)
+    parser = DspyOutputParser(pydantic_object=KGCritiqueReport)
 
     prompt = PromptTemplate(
         template=criticise_facts_prompt,
