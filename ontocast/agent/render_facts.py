@@ -5,6 +5,7 @@ human-readable formats, making the extracted knowledge more accessible and
 understandable.
 """
 
+import asyncio
 import logging
 import textwrap
 
@@ -24,7 +25,7 @@ from ontocast.util import truncate_ontology_string, truncate_text
 logger = logging.getLogger(__name__)
 
 
-def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
+async def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
     """Render facts from the current chunk into a human-readable format.
 
     This function takes the facts in the current chunk and renders them into a
@@ -73,47 +74,48 @@ def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
                     f"\n\nIt failed at the stage: {state.failure_stage}"
                 )
             failure_instruction += f"\n\n{state.failure_reason}"
-            failure_instruction += (
-                "\n\nPlease fix the errors "
-                "and do your best to generate fact triples again."
-            )
+            failure_instruction += "\n\nPlease fix the errors and do your best to generate fact triples again."
         else:
             failure_instruction = ""
 
-        # Chunk the input text to create smaller, more manageable prompts
         chunk_texts = textwrap.wrap(
             state.current_chunk.text, 4000, replace_whitespace=False
         )
-        reports = []
 
-        for i, sub_chunk_text in enumerate(chunk_texts):
-            try:
-                response = llm_tool(
-                    prompt.format_prompt(
-                        ontology_namespace=state.current_ontology.namespace,
-                        current_doc_namespace=state.current_chunk.namespace,
-                        text=truncate_text(
-                            sub_chunk_text
-                        ),  # Still truncate sub-chunk just in case
-                        ontology_instruction=ontology_instruction_str,
-                        failure_instruction=failure_instruction,
-                        format_instructions=parser.get_format_instructions(),
-                    )
+        async def process_sub_chunk(sub_chunk_text):
+            response = await llm_tool.acall(
+                prompt.format_prompt(
+                    ontology_namespace=state.current_ontology.namespace,
+                    current_doc_namespace=state.current_chunk.namespace,
+                    text=truncate_text(sub_chunk_text),
+                    ontology_instruction=ontology_instruction_str,
+                    failure_instruction=failure_instruction,
+                    format_instructions=parser.get_format_instructions(),
                 )
-                report = parser.parse(response.content)
-                reports.append(report)
-            except Exception as e:
-                logging.warning(
-                    f"Failed to process sub-chunk {i + 1}/{len(chunk_texts)}: {e}"
-                )
+            )
+            return parser.parse(response.content)
 
-        # Merge the results from all sub-chunks
+        tasks = [process_sub_chunk(text) for text in chunk_texts]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        reports = [
+            res for res in results if isinstance(res, SemanticTriplesFactsReport)
+        ]
+        exceptions = [res for res in results if isinstance(res, Exception)]
+
+        if exceptions:
+            logging.warning(
+                f"{len(exceptions)}/{len(tasks)} sub-chunks failed during processing."
+            )
+
+        if not reports:
+            raise RuntimeError("All sub-chunks failed to generate facts.")
+
         final_report = SemanticTriplesFactsReport()
         for report in reports:
             if report.semantic_graph:
                 final_report.semantic_graph += report.semantic_graph
 
-        # Use the average of the scores
         valid_relevance_scores = [
             r.ontology_relevance_score
             for r in reports
@@ -142,6 +144,8 @@ def render_facts(state: AgentState, tools: ToolBox) -> AgentState:
         return state
 
     except Exception as e:
-        logger.error(f"Failed to generate triples: {str(e)}")
-        state.set_failure(FailureStages.PARSE_TEXT_TO_FACTS_TRIPLES, str(e))
+        logger.error(f"Failed to generate triples: {e}")
+        state.status = Status.FAILED
+        state.failure_stage = FailureStages.TEXT_TO_FACTS
+        state.failure_reason = str(e)
         return state

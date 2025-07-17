@@ -56,6 +56,7 @@ requires-python = ">=3.12"
 version = "0.1.5"
 
 [project.scripts]
+_to_mermaid = "ontocast.cli.turtle_to_mermaid:main"
 cmp-states = "ontocast.cli.cmp_states:main"
 pdfs-to-markdown = "ontocast.cli.pdfs_to_markdown:main"
 plot-graph = "ontocast.cli.plot_graph:main"

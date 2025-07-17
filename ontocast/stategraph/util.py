@@ -1,3 +1,4 @@
+import inspect
 from functools import wraps
 from typing import Callable
 
@@ -46,9 +47,15 @@ def wrap_with(func, node_name, post_func) -> tuple[WorkflowNode, Callable]:
     """
 
     @wraps(func)
-    def wrapper(state: AgentState):
+    async def wrapper(state: AgentState):
         logger.info(f"Starting to execute {node_name}")
-        state = func(state)
+        # Check if the function is a coroutine function (async) to await it,
+        # otherwise call it directly. We need to check func.func because the
+        # function is a functools.partial object.
+        if inspect.iscoroutinefunction(func.func):
+            state = await func(state)
+        else:
+            state = func(state)
         state = post_func(state, node_name)
         return state
 

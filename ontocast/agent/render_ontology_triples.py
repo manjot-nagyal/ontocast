@@ -5,6 +5,7 @@ human-readable formats, making the ontological knowledge more accessible and
 understandable.
 """
 
+import asyncio
 import logging
 import textwrap
 
@@ -27,7 +28,7 @@ from ontocast.util import truncate_ontology_string, truncate_text
 logger = logging.getLogger(__name__)
 
 
-def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
+async def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
     """Render ontology triples into a human-readable format.
 
     This function takes the triples from the current ontology and renders them
@@ -103,33 +104,36 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
         _failure_instruction = ""
 
     try:
-        # Chunk the input text to create smaller, more manageable prompts
         chunk_texts = textwrap.wrap(
             state.current_chunk.text, 4000, replace_whitespace=False
         )
-        addenda = []
 
-        for i, sub_chunk_text in enumerate(chunk_texts):
-            try:
-                response = llm_tool(
-                    prompt.format_prompt(
-                        text=truncate_text(
-                            sub_chunk_text
-                        ),  # Still truncate sub-chunk just in case
-                        instructions=_instructions,
-                        ontology_instruction=ontology_instruction,
-                        failure_instruction=_failure_instruction,
-                        format_instructions=parser.get_format_instructions(),
-                    )
+        async def process_sub_chunk(sub_chunk_text):
+            response = await llm_tool.acall(
+                prompt.format_prompt(
+                    text=truncate_text(sub_chunk_text),
+                    instructions=_instructions,
+                    ontology_instruction=ontology_instruction,
+                    failure_instruction=_failure_instruction,
+                    format_instructions=parser.get_format_instructions(),
                 )
-                addendum = parser.parse(response.content)
-                addenda.append(addendum)
-            except Exception as e:
-                logging.warning(
-                    f"Failed to process sub-chunk {i + 1}/{len(chunk_texts)} for ontology addendum: {e}"
-                )
+            )
+            return parser.parse(response.content)
 
-        # Merge the results from all sub-chunks
+        tasks = [process_sub_chunk(text) for text in chunk_texts]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        addenda = [res for res in results if isinstance(res, Ontology)]
+        exceptions = [res for res in results if isinstance(res, Exception)]
+
+        if exceptions:
+            logging.warning(
+                f"{len(exceptions)}/{len(tasks)} sub-chunks failed during ontology generation."
+            )
+
+        if not addenda:
+            raise RuntimeError("All sub-chunks failed to generate ontology addenda.")
+
         final_addendum = Ontology()
         for addendum in addenda:
             if addendum.graph:
@@ -145,6 +149,8 @@ def render_onto_triples(state: AgentState, tools: ToolBox) -> AgentState:
         return state
 
     except Exception as e:
-        logger.error(f"Failed to generate triples: {str(e)}")
-        state.set_failure(FailureStages.PARSE_TEXT_TO_ONTOLOGY_TRIPLES, str(e))
+        logger.error(f"Failed to generate ontology triples: {e}")
+        state.status = Status.FAILED
+        state.failure_stage = FailureStages.TEXT_TO_ONTOLOGY_TRIPLES
+        state.failure_reason = str(e)
         return state

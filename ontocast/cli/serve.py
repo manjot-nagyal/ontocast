@@ -348,17 +348,24 @@ def run(
                         max_visits=max_visits,
                         max_chunks=head_chunks,
                     )
-                    async for _ in workflow.astream(
+                    final_state = None
+                    async for chunk in workflow.astream(
                         state,
                         stream_mode="values",
                         config=RunnableConfig(recursion_limit=recursion_limit),
                     ):
-                        pass
+                        final_state = chunk
+
+                    if final_state:
+                        logger.info(f"Finished processing {file_path.name}")
 
                 except Exception as e:
-                    logger.error(f"Error processing {file_path}: {str(e)}")
+                    logger.error(
+                        f"Error processing {file_path}: {str(e)}", exc_info=True
+                    )
 
         asyncio.run(process_files())
+
     else:
         app = create_app(tools, head_chunks, max_visits=max_visits)
         logger.info(f"Starting MCP-ready server on port {port}")

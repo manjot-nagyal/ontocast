@@ -81,6 +81,26 @@ class LLMTool(Tool):
         await self.setup()
         return self
 
+    async def acall(self, prompt: str) -> Any:
+        """Invoke the language model asynchronously."""
+        if not self._llm:
+            await self.setup()
+
+        response = await self._llm.ainvoke(prompt)
+        return response
+
+    def __call__(self, prompt: str) -> Any:
+        """Invoke the language model synchronously."""
+        if not self._llm:
+            # Since this is a sync method, we can't await setup.
+            # We rely on the create() classmethod which handles async setup.
+            raise RuntimeError(
+                "LLM not initialized. Use LLMTool.create() or acreate() to instantiate."
+            )
+
+        response = self._llm.invoke(prompt)
+        return response
+
     async def setup(self):
         """Set up the language model based on the configured provider.
 
@@ -103,17 +123,17 @@ class LLMTool(Tool):
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
 
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
-        """Call the language model directly.
+    # def __call__(self, *args: Any, **kwds: Any) -> Any:
+    #     """Call the language model directly.
 
-        Args:
-            *args: Positional arguments passed to the LLM.
-            **kwds: Keyword arguments passed to the LLM.
+    #     Args:
+    #         *args: Positional arguments passed to the LLM.
+    #         **kwds: Keyword arguments passed to the LLM.
 
-        Returns:
-            Any: The LLM's response.
-        """
-        return self.llm.invoke(*args, **kwds)
+    #     Returns:
+    #         Any: The LLM's response.
+    #     """
+    #     return self.llm.invoke(*args, **kwds)
 
     @property
     def llm(self) -> BaseChatModel:
